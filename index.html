@@ -274,6 +274,7 @@ input,select,textarea{font-family:'DM Sans',sans-serif;}
 .status-chip{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
 .status-active{background:rgba(34,197,94,.1);color:#22c55e;border:1px solid rgba(34,197,94,.22);}
 .status-suspended{background:rgba(248,113,113,.1);color:#f87171;border:1px solid rgba(248,113,113,.22);}
+.status-banned{background:rgba(244,63,94,.12);color:#f43f5e;border:1px solid rgba(244,63,94,.28);}
 .plan-chip{padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;}
 .plan-premium{background:rgba(245,197,24,.1);color:#f5c518;border:1px solid rgba(245,197,24,.22);}
 .plan-standard{background:rgba(255,255,255,.06);color:#777;border:1px solid #272727;}
@@ -621,6 +622,7 @@ function svg(id,size,color,extra){
       </button>
       <button class="sidebar-item" onclick="showAdminPage('users')">
         <svg width="15" height="15" style="fill:none;stroke:currentColor;stroke-width:2"><use href="#ic-users"/></svg>Users
+        <span class="sidebar-badge" id="users-count-badge">4</span>
       </button>
       <button class="sidebar-item" onclick="showAdminPage('analytics')">
         <svg width="15" height="15" style="fill:none;stroke:currentColor;stroke-width:2"><use href="#ic-trend"/></svg>Analytics
@@ -818,192 +820,540 @@ function svg(id,size,color,extra){
   </div>
 </div>
 
+
+<!-- EDIT USER MODAL -->
+<div class="overlay hidden" id="user-form-modal" onclick="closeModal('user-form-modal')">
+  <div class="modal-box" style="max-width:480px;" onclick="event.stopPropagation()">
+    <div style="padding:22px 22px 0;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <h2 style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:1.5px;">Edit User</h2>
+        <p style="font-size:12px;color:#555;margin-top:2px;" id="uf-user-id-label"></p>
+      </div>
+      <button onclick="closeModal('user-form-modal')" style="background:none;border:none;cursor:pointer;"><svg width="18" height="18" style="fill:none;stroke:#777;stroke-width:2"><use href="#ic-close"/></svg></button>
+    </div>
+    <div style="padding:18px 22px 22px;">
+      <!-- Avatar preview row -->
+      <div style="display:flex;align-items:center;gap:14px;padding:14px;background:#0a0a0a;border:1px solid #1e1e1e;border-radius:10px;margin-bottom:18px;">
+        <div id="uf-avatar-preview" style="width:44px;height:44px;background:linear-gradient(135deg,#e50914,#7c3aed);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;"></div>
+        <div>
+          <div id="uf-name-preview" style="font-size:14px;font-weight:600;"></div>
+          <div id="uf-email-preview" style="font-size:11.5px;color:#555;"></div>
+        </div>
+        <div id="uf-status-preview" style="margin-left:auto;"></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:0;">
+        <div class="form-field" style="grid-column:1/-1;"><label class="form-label">USERNAME</label><input class="inp inp-a" id="uf-inp-name" placeholder="Full name" oninput="updateUFPreview()"/></div>
+        <div class="form-field" style="grid-column:1/-1;"><label class="form-label">EMAIL</label><input class="inp inp-a" id="uf-inp-email" placeholder="user@example.com" oninput="updateUFPreview()"/></div>
+        <div class="form-field" style="grid-column:1/-1;">
+          <label class="form-label">NEW PASSWORD <span style="color:#444;font-weight:400;text-transform:none;letter-spacing:0;">(leave blank to keep current)</span></label>
+          <div class="pw-wrap">
+            <input class="inp inp-a" id="uf-inp-pw" type="password" placeholder="••••••••"/>
+            <button class="pw-toggle" onclick="toggleUFPw()">SHOW</button>
+          </div>
+        </div>
+        <div class="form-field">
+          <label class="form-label">SUBSCRIPTION PLAN</label>
+          <select class="inp inp-a" id="uf-inp-plan" onchange="updateUFPreview()">
+            <option value="Basic">Basic</option>
+            <option value="Standard">Standard</option>
+            <option value="Premium">Premium</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label class="form-label">ACCOUNT STATUS</label>
+          <select class="inp inp-a" id="uf-inp-status" onchange="updateUFPreview()">
+            <option value="Active">Active</option>
+            <option value="Suspended">Suspended</option>
+            <option value="Banned">Banned</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="uf-err" class="auth-err hidden" style="margin:10px 0 4px;"></div>
+
+      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:16px;align-items:center;">
+        <button class="btn-purple" onclick="submitUserForm()" style="flex:1;justify-content:center;">
+          <svg width="14" height="14" style="fill:none;stroke:#fff;stroke-width:2"><use href="#ic-check"/></svg>Save Changes
+        </button>
+        <button class="btn-ghost" onclick="closeModal('user-form-modal')">Cancel</button>
+        <button class="btn-danger" onclick="openDeleteUserModal(state.editingUserId)" style="margin-left:auto;">
+          <svg width="12" height="12" style="fill:none;stroke:#f87171;stroke-width:2"><use href="#ic-trash"/></svg>Delete User
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE USER CONFIRM MODAL -->
+<div class="overlay hidden" id="del-user-modal" onclick="closeModal('del-user-modal')">
+  <div class="modal-box" style="max-width:360px;" onclick="event.stopPropagation()">
+    <div style="padding:28px;text-align:center;">
+      <div style="width:52px;height:52px;background:rgba(248,113,113,.1);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+        <svg width="22" height="22" style="fill:none;stroke:#f87171;stroke-width:2"><use href="#ic-trash"/></svg>
+      </div>
+      <h2 style="font-size:19px;font-weight:700;margin-bottom:8px;">Delete this user?</h2>
+      <p style="color:#777;font-size:13.5px;margin-bottom:6px;line-height:1.6;" id="del-user-name-hint"></p>
+      <p style="color:#555;font-size:12px;margin-bottom:22px;">This is permanent. All their data, watchlist, and history will be removed.</p>
+      <div style="display:flex;gap:9px;justify-content:center;flex-wrap:wrap;">
+        <button class="btn-danger" id="del-user-confirm-btn" style="padding:10px 20px;font-size:13.5px;font-weight:600;">
+          <svg width="14" height="14" style="fill:none;stroke:#f87171;stroke-width:2"><use href="#ic-trash"/></svg>Yes, Delete
+        </button>
+        <button class="btn-ghost" onclick="closeModal('del-user-modal')" style="padding:10px 18px;">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════════════════════════════════════
-     JAVASCRIPT
+     JAVASCRIPT  —  StreamVault with localStorage DBMS
 ══════════════════════════════════════════════════════════════════════════ -->
 <script>
-// ─── DATA ────────────────────────────────────────────────────────────────────
-const ADMIN_CREDS = { name:"admin", password:"password", email:"admin@streamvault.io", avatar:"ADMIN", role:"admin" };
+/* ═══════════════════════════════════════════════════════════════════════════
+   ██████╗ ██████╗ ███╗   ███╗███████╗
+   ██╔══██╗██╔══██╗████╗ ████║██╔════╝
+   ██║  ██║██████╔╝██╔████╔██║███████╗
+   ██║  ██║██╔══██╗██║╚██╔╝██║╚════██║
+   ██████╔╝██████╔╝██║ ╚═╝ ██║███████║
+   ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚══════╝
 
-const MOVIES_DATA = [
-  {id:1, title:"Neon Abyss", genre:"Sci-Fi", year:2024, rating:9.1, duration:"2h 18m", views:4821000, description:"A lone engineer drifts through the outer rings of a dying star, uncovering a signal that redefines humanity's place in the cosmos.", bg:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", accent:"#a78bfa", badge:"NEW", cast:["Elena Voss","Marcus Rei","Yuki Tanaka"], director:"Sofia Brennan"},
-  {id:2, title:"Crimson Tide Rising", genre:"Thriller", year:2024, rating:8.7, duration:"1h 54m", views:3102000, description:"A marine biologist's routine dive turns into a desperate survival mission when a classified government experiment surfaces from the deep.", bg:"linear-gradient(135deg,#c0392b,#8e44ad)", accent:"#f87171", badge:"TOP 10", cast:["James Hollow","Amara Diop","Chen Wei"], director:"Patrick Osei"},
-  {id:3, title:"The Glass Cathedral", genre:"Drama", year:2023, rating:9.4, duration:"2h 41m", views:6500000, description:"An architect's obsession with a centuries-old blueprint leads her down a labyrinth of secrets buried beneath an ancient city.", bg:"linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)", accent:"#60a5fa", badge:"AWARD", cast:["Isabella Crane","Otto Mayer","Priya Nair"], director:"Léa Fontaine"},
-  {id:4, title:"Dust & Thunder", genre:"Western", year:2023, rating:8.3, duration:"2h 05m", views:2890000, description:"In a frontier town swallowed by drought, two rival families negotiate an uneasy truce — until a stranger arrives with a suitcase full of dynamite.", bg:"linear-gradient(135deg,#7c2d12,#78350f,#451a03)", accent:"#fb923c", badge:null, cast:["Roy Caldwell","Nadia Cruz","Elias Borg"], director:"Sam Whitfield"},
-  {id:5, title:"Quantum Bloom", genre:"Sci-Fi", year:2024, rating:8.9, duration:"1h 58m", views:5100000, description:"A particle physicist accidentally fractures the fabric of time, releasing echoes of herself across parallel timelines — each one a warning.", bg:"linear-gradient(135deg,#064e3b,#065f46,#134e4a)", accent:"#34d399", badge:"NEW", cast:["Serena Cole","Amit Sharma","David Park"], director:"Hana Müller"},
-  {id:6, title:"Hollow Kingdom", genre:"Fantasy", year:2024, rating:9.2, duration:"3h 02m", views:7800000, description:"A displaced queen must forge alliances with the very creatures who toppled her throne to reclaim a realm consumed by shadow.", bg:"linear-gradient(135deg,#2d1b69,#4a1942,#1a0533)", accent:"#c084fc", badge:"TOP 10", cast:["Freya Storm","Kael Moon","Rina Basset"], director:"Tobias Vane"},
-  {id:7, title:"Midnight Protocol", genre:"Thriller", year:2023, rating:8.5, duration:"1h 47m", views:3400000, description:"An ex-intelligence officer races against dawn to stop a coordinated cyberattack that will permanently erase a nation's financial identity.", bg:"linear-gradient(135deg,#0f172a,#1e293b,#0f172a)", accent:"#94a3b8", badge:null, cast:["Nathan Grey","Mia Kolski","Hiro Suzuki"], director:"Rachel Vance"},
-  {id:8, title:"Ember & Ash", genre:"Romance", year:2023, rating:8.0, duration:"1h 52m", views:2200000, description:"Two strangers meet in the wreckage of a wildfire evacuation and discover their lives have been invisibly intertwined for decades.", bg:"linear-gradient(135deg,#7f1d1d,#991b1b,#450a0a)", accent:"#fca5a5", badge:null, cast:["Clara Webb","Jonas Feld","Aisha Grant"], director:"Naomi Sato"},
-  {id:9, title:"The Cartographer", genre:"Adventure", year:2024, rating:8.8, duration:"2h 23m", views:4300000, description:"A treasure map etched onto a dying linguist's skin sends his granddaughter across three continents before the ink fades forever.", bg:"linear-gradient(135deg,#1c1917,#292524,#1c1917)", accent:"#d97706", badge:"NEW", cast:["Lily Okafor","Rodrigo Vaz","Thomas Dunn"], director:"André Costa"},
-  {id:10, title:"Frost Line", genre:"Horror", year:2023, rating:8.6, duration:"1h 39m", views:3700000, description:"A research team at an Arctic station begins to unravel after discovering something beneath the permafrost has been listening all along.", bg:"linear-gradient(135deg,#0c1445,#1e3a5f,#0a2744)", accent:"#7dd3fc", badge:null, cast:["Vera Sund","Luis Cabral","Nina Frost"], director:"Erik Halvorsen"},
-  {id:11, title:"Silk Road Dreams", genre:"Historical", year:2023, rating:9.0, duration:"2h 55m", views:5500000, description:"A merchant's journey along the ancient trade route becomes a meditation on identity, empire, and the stories we carry across borders.", bg:"linear-gradient(135deg,#78350f,#92400e,#451a03)", accent:"#fcd34d", badge:"AWARD", cast:["Amir Karimi","Liu Xin","Fatima Al-Hassan"], director:"Yasmin Okoye"},
-  {id:12, title:"Static Noise", genre:"Drama", year:2024, rating:8.4, duration:"2h 07m", views:2600000, description:"A radio operator in a remote mountain town intercepts a broadcast from a frequency that hasn't been active since 1987 — the voice is familiar.", bg:"linear-gradient(135deg,#18181b,#27272a,#18181b)", accent:"#a1a1aa", badge:null, cast:["Sophie Lane","Mark Ellis","Carl Rivers"], director:"Diana Stone"},
+   SQL TABLE SCHEMA (stored in localStorage as JSON arrays)
+   ─────────────────────────────────────────────────────────
+   TABLE sv_users
+     id          INTEGER  PRIMARY KEY  (Date.now())
+     name        TEXT     NOT NULL
+     email       TEXT     NOT NULL  UNIQUE
+     password    TEXT     NOT NULL
+     plan        TEXT     DEFAULT 'Basic'      -- Basic | Standard | Premium
+     status      TEXT     DEFAULT 'Active'     -- Active | Suspended
+     joined      TEXT                          -- e.g. "Jan 2025"
+     avatar      TEXT                          -- initials
+     watchlist   JSON     DEFAULT '[]'         -- array of movie ids
+     watched     JSON     DEFAULT '[]'         -- array of movie ids
+     createdAt   TEXT                          -- ISO timestamp
+
+   TABLE sv_movies
+     id          INTEGER  PRIMARY KEY  (Date.now())
+     title       TEXT     NOT NULL
+     genre       TEXT
+     year        INTEGER
+     rating      REAL
+     duration    TEXT
+     views       INTEGER
+     badge       TEXT     NULL
+     director    TEXT
+     cast        JSON
+     description TEXT
+     bg          TEXT                          -- CSS gradient
+     accent      TEXT                          -- hex color
+     createdAt   TEXT
+
+   TABLE sv_sessions
+     (single row stored as 'sv_session')
+     userId      INTEGER
+     role        TEXT     -- 'user' | 'admin'
+     ts          INTEGER  -- timestamp
+═══════════════════════════════════════════════════════════════════════════ */
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DATABASE OBJECT — all localStorage reads/writes go through here
+// ═══════════════════════════════════════════════════════════════════════════
+const DB = {
+
+  // ── Internal I/O ──────────────────────────────────────────────────────────
+  _read(table) {
+    try { return JSON.parse(localStorage.getItem(table) || '[]'); }
+    catch(e) { console.warn('DB._read error', e); return []; }
+  },
+  _write(table, rows) {
+    try { localStorage.setItem(table, JSON.stringify(rows)); }
+    catch(e) { console.error('DB._write error (storage full?)', e); }
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TABLE: sv_users
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /** SELECT * FROM sv_users */
+  getAllUsers() { return this._read('sv_users'); },
+
+  /** SELECT * FROM sv_users WHERE email = ? (case-insensitive) */
+  findUserByEmail(email) {
+    return this.getAllUsers().find(u => u.email.toLowerCase() === email.toLowerCase()) || null;
+  },
+
+  /** SELECT * FROM sv_users WHERE id = ? */
+  findUserById(id) {
+    return this.getAllUsers().find(u => u.id === id) || null;
+  },
+
+  /** INSERT INTO sv_users VALUES (?) — returns new user object */
+  insertUser(data) {
+    const rows = this.getAllUsers();
+    const user = {
+      id:        Date.now(),
+      name:      data.name.trim(),
+      email:     data.email.trim().toLowerCase(),
+      password:  data.password,
+      plan:      data.plan    || 'Basic',
+      status:    'Active',
+      joined:    new Date().toLocaleDateString('en-US', { month:'short', year:'numeric' }),
+      avatar:    data.name.trim().slice(0,2).toUpperCase(),
+      watchlist: [],
+      watched:   [],
+      createdAt: new Date().toISOString(),
+    };
+    rows.push(user);
+    this._write('sv_users', rows);
+    console.log('[DB] INSERT sv_users →', user.email, '| total rows:', rows.length);
+    return user;
+  },
+
+  /** UPDATE sv_users SET ? WHERE id = ? — returns updated user */
+  updateUser(id, patch) {
+    const rows = this.getAllUsers().map(u => u.id === id ? { ...u, ...patch } : u);
+    this._write('sv_users', rows);
+    return rows.find(u => u.id === id) || null;
+  },
+
+  /** DELETE FROM sv_users WHERE id = ? */
+  deleteUser(id) {
+    this._write('sv_users', this.getAllUsers().filter(u => u.id !== id));
+    console.log('[DB] DELETE sv_users id=', id);
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TABLE: sv_movies
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /** SELECT * FROM sv_movies */
+  getAllMovies() { return this._read('sv_movies'); },
+
+  /** SELECT * FROM sv_movies WHERE id = ? */
+  findMovieById(id) {
+    return this.getAllMovies().find(m => m.id === id) || null;
+  },
+
+  /** INSERT INTO sv_movies VALUES (?) — prepends so new shows first */
+  insertMovie(data) {
+    const rows = this.getAllMovies();
+    const movie = { ...data, id: Date.now(), createdAt: new Date().toISOString() };
+    rows.unshift(movie);
+    this._write('sv_movies', rows);
+    console.log('[DB] INSERT sv_movies →', movie.title);
+    return movie;
+  },
+
+  /** UPDATE sv_movies SET ? WHERE id = ? */
+  updateMovie(id, patch) {
+    const rows = this.getAllMovies().map(m => m.id === id ? { ...m, ...patch } : m);
+    this._write('sv_movies', rows);
+    return rows.find(m => m.id === id) || null;
+  },
+
+  /** DELETE FROM sv_movies WHERE id = ? */
+  deleteMovie(id) {
+    this._write('sv_movies', this.getAllMovies().filter(m => m.id !== id));
+    console.log('[DB] DELETE sv_movies id=', id);
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TABLE: sv_sessions (single-row)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  saveSession(userId, role) {
+    localStorage.setItem('sv_session', JSON.stringify({ userId, role, ts: Date.now() }));
+  },
+  getSession() {
+    try { return JSON.parse(localStorage.getItem('sv_session') || 'null'); }
+    catch(e) { return null; }
+  },
+  clearSession() { localStorage.removeItem('sv_session'); },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SEED — populate tables on first run
+  // ══════════════════════════════════════════════════════════════════════════
+  seed() {
+    if (this.getAllMovies().length === 0) {
+      MOVIES_SEED.forEach(m => {
+        const rows = this._read('sv_movies');
+        rows.push({ ...m, createdAt: new Date().toISOString() });
+        this._write('sv_movies', rows);
+      });
+      console.log('[DB] Seeded sv_movies —', MOVIES_SEED.length, 'rows');
+    }
+    if (this.getAllUsers().length === 0) {
+      USERS_SEED.forEach(u => {
+        const rows = this._read('sv_users');
+        rows.push({ ...u, createdAt: new Date().toISOString() });
+        this._write('sv_users', rows);
+      });
+      console.log('[DB] Seeded sv_users —', USERS_SEED.length, 'rows');
+    }
+  },
+
+  /** DROP ALL + re-seed */
+  resetAll() {
+    localStorage.removeItem('sv_users');
+    localStorage.removeItem('sv_movies');
+    localStorage.removeItem('sv_session');
+    this.seed();
+    console.log('[DB] Database reset complete');
+  },
+
+  /** Human-readable storage size */
+  storageSize() {
+    let total = 0;
+    ['sv_users','sv_movies','sv_session'].forEach(k => {
+      total += (localStorage.getItem(k) || '').length;
+    });
+    return (total / 1024).toFixed(1) + ' KB';
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SEED DATA
+// ═══════════════════════════════════════════════════════════════════════════
+const ADMIN_CREDS = {
+  id: 0, name: 'admin', password: 'password',
+  email: 'admin@streamvault.io', avatar: 'AD', role: 'admin'
+};
+
+const MOVIES_SEED = [
+  {id:1,  title:"Neon Abyss",         genre:"Sci-Fi",    year:2024, rating:9.1, duration:"2h 18m", views:4821000, description:"A lone engineer drifts through the outer rings of a dying star, uncovering a signal that redefines humanity's place in the cosmos.", bg:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", accent:"#a78bfa", badge:"NEW",    cast:["Elena Voss","Marcus Rei","Yuki Tanaka"],       director:"Sofia Brennan"},
+  {id:2,  title:"Crimson Tide Rising", genre:"Thriller",  year:2024, rating:8.7, duration:"1h 54m", views:3102000, description:"A marine biologist's routine dive turns into a desperate survival mission when a classified government experiment surfaces from the deep.", bg:"linear-gradient(135deg,#c0392b,#8e44ad)", accent:"#f87171", badge:"TOP 10", cast:["James Hollow","Amara Diop","Chen Wei"],           director:"Patrick Osei"},
+  {id:3,  title:"The Glass Cathedral", genre:"Drama",     year:2023, rating:9.4, duration:"2h 41m", views:6500000, description:"An architect's obsession with a centuries-old blueprint leads her down a labyrinth of secrets buried beneath an ancient city.", bg:"linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)", accent:"#60a5fa", badge:"AWARD",  cast:["Isabella Crane","Otto Mayer","Priya Nair"],      director:"Léa Fontaine"},
+  {id:4,  title:"Dust & Thunder",      genre:"Western",   year:2023, rating:8.3, duration:"2h 05m", views:2890000, description:"In a frontier town swallowed by drought, two rival families negotiate an uneasy truce — until a stranger arrives with a suitcase full of dynamite.", bg:"linear-gradient(135deg,#7c2d12,#78350f,#451a03)", accent:"#fb923c", badge:null,    cast:["Roy Caldwell","Nadia Cruz","Elias Borg"],        director:"Sam Whitfield"},
+  {id:5,  title:"Quantum Bloom",       genre:"Sci-Fi",    year:2024, rating:8.9, duration:"1h 58m", views:5100000, description:"A particle physicist accidentally fractures the fabric of time, releasing echoes of herself across parallel timelines — each one a warning.", bg:"linear-gradient(135deg,#064e3b,#065f46,#134e4a)", accent:"#34d399", badge:"NEW",    cast:["Serena Cole","Amit Sharma","David Park"],        director:"Hana Müller"},
+  {id:6,  title:"Hollow Kingdom",      genre:"Fantasy",   year:2024, rating:9.2, duration:"3h 02m", views:7800000, description:"A displaced queen must forge alliances with the very creatures who toppled her throne to reclaim a realm consumed by shadow.", bg:"linear-gradient(135deg,#2d1b69,#4a1942,#1a0533)", accent:"#c084fc", badge:"TOP 10", cast:["Freya Storm","Kael Moon","Rina Basset"],          director:"Tobias Vane"},
+  {id:7,  title:"Midnight Protocol",   genre:"Thriller",  year:2023, rating:8.5, duration:"1h 47m", views:3400000, description:"An ex-intelligence officer races against dawn to stop a coordinated cyberattack that will permanently erase a nation's financial identity.", bg:"linear-gradient(135deg,#0f172a,#1e293b,#0f172a)", accent:"#94a3b8", badge:null,    cast:["Nathan Grey","Mia Kolski","Hiro Suzuki"],        director:"Rachel Vance"},
+  {id:8,  title:"Ember & Ash",         genre:"Romance",   year:2023, rating:8.0, duration:"1h 52m", views:2200000, description:"Two strangers meet in the wreckage of a wildfire evacuation and discover their lives have been invisibly intertwined for decades.", bg:"linear-gradient(135deg,#7f1d1d,#991b1b,#450a0a)", accent:"#fca5a5", badge:null,    cast:["Clara Webb","Jonas Feld","Aisha Grant"],         director:"Naomi Sato"},
+  {id:9,  title:"The Cartographer",    genre:"Adventure", year:2024, rating:8.8, duration:"2h 23m", views:4300000, description:"A treasure map etched onto a dying linguist's skin sends his granddaughter across three continents before the ink fades forever.", bg:"linear-gradient(135deg,#1c1917,#292524,#1c1917)", accent:"#d97706", badge:"NEW",    cast:["Lily Okafor","Rodrigo Vaz","Thomas Dunn"],       director:"André Costa"},
+  {id:10, title:"Frost Line",          genre:"Horror",    year:2023, rating:8.6, duration:"1h 39m", views:3700000, description:"A research team at an Arctic station begins to unravel after discovering something beneath the permafrost has been listening all along.", bg:"linear-gradient(135deg,#0c1445,#1e3a5f,#0a2744)", accent:"#7dd3fc", badge:null,    cast:["Vera Sund","Luis Cabral","Nina Frost"],          director:"Erik Halvorsen"},
+  {id:11, title:"Silk Road Dreams",    genre:"Historical",year:2023, rating:9.0, duration:"2h 55m", views:5500000, description:"A merchant's journey along the ancient trade route becomes a meditation on identity, empire, and the stories we carry across borders.", bg:"linear-gradient(135deg,#78350f,#92400e,#451a03)", accent:"#fcd34d", badge:"AWARD",  cast:["Amir Karimi","Liu Xin","Fatima Al-Hassan"],      director:"Yasmin Okoye"},
+  {id:12, title:"Static Noise",        genre:"Drama",     year:2024, rating:8.4, duration:"2h 07m", views:2600000, description:"A radio operator in a remote mountain town intercepts a broadcast from a frequency that hasn't been active since 1987 — the voice is familiar.", bg:"linear-gradient(135deg,#18181b,#27272a,#18181b)", accent:"#a1a1aa", badge:null,    cast:["Sophie Lane","Mark Ellis","Carl Rivers"],        director:"Diana Stone"},
 ];
 
-const USERS_DATA = [
-  {id:1,name:"Alex Rivera",email:" ",plan:"Premium",joined:"Jan 2024",watchlist:[1,3,6],watched:[2,5,8,11],avatar:"AR",status:"Active"},
-  {id:2,name:"Jordan Kim",email:"jordan@streamvault.io",plan:"Standard",joined:"Mar 2024",watchlist:[4,7],watched:[1,3,6,9,12],avatar:"JK",status:"Active"},
-  {id:3,name:"Morgan Casey",email:"morgan@streamvault.io",plan:"Basic",joined:"Feb 2024",watchlist:[2],watched:[4,10],avatar:"MC",status:"Suspended"},
-  {id:4,name:"Taylor Brooks",email:"taylor@streamvault.io",plan:"Premium",joined:"Apr 2024",watchlist:[5,9,11],watched:[1,2,3,7],avatar:"TB",status:"Active"},
+const USERS_SEED = [
+  {id:101, name:"Alex Rivera",   email:"alex@streamvault.io",    password:"demo123", plan:"Premium",  status:"Active",    joined:"Jan 2024", avatar:"AR", watchlist:[1,3,6],    watched:[2,5,8,11]},
+  {id:102, name:"Jordan Kim",    email:"jordan@streamvault.io",  password:"demo123", plan:"Standard", status:"Active",    joined:"Mar 2024", avatar:"JK", watchlist:[4,7],      watched:[1,3,6,9,12]},
+  {id:103, name:"Morgan Casey",  email:"morgan@streamvault.io",  password:"demo123", plan:"Basic",    status:"Suspended", joined:"Feb 2024", avatar:"MC", watchlist:[2],        watched:[4,10]},
+  {id:104, name:"Taylor Brooks", email:"taylor@streamvault.io",  password:"demo123", plan:"Premium",  status:"Active",    joined:"Apr 2024", avatar:"TB", watchlist:[5,9,11],   watched:[1,2,3,7]},
 ];
 
 const GENRES = ["All","Sci-Fi","Thriller","Drama","Western","Fantasy","Romance","Adventure","Horror","Historical"];
 
-// ─── STATE ───────────────────────────────────────────────────────────────────
+// ── Seed on first ever load ────────────────────────────────────────────────
+DB.seed();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RUNTIME STATE — in-memory cache; always re-loaded from DB before use
+// ═══════════════════════════════════════════════════════════════════════════
 let state = {
-  currentUser: null,
-  movies: JSON.parse(JSON.stringify(MOVIES_DATA)),
-  users: JSON.parse(JSON.stringify(USERS_DATA)),
-  watchlist: [],
-  watched: [2,5,8,11],
-  currentGenre: 'All',
-  currentSearch: '',
-  editingMovieId: null,
-  deleteMovieId: null,
+  currentUser:       null,
+  movies:            DB.getAllMovies(),
+  users:             DB.getAllUsers(),
+  watchlist:         [],
+  watched:           [],
+  currentGenre:      'All',
+  currentSearch:     '',
+  editingMovieId:    null,
+  deleteMovieId:     null,
   currentMovieModal: null,
-  role: 'user',
-  mode: 'login',
+  editingUserId:     null,
+  deleteUserId:      null,
 };
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
-const fV = n => n>=1e6?`${(n/1e6).toFixed(1)}M`:`${(n/1e3).toFixed(0)}K`;
-const $ = id => document.getElementById(id);
-const el = (tag,cls,html,style) => {
+/** Reload both arrays from localStorage into state */
+function syncState() {
+  state.movies = DB.getAllMovies();
+  state.users  = DB.getAllUsers();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+const fV = n => n >= 1e6 ? `${(n/1e6).toFixed(1)}M` : `${(n/1e3).toFixed(0)}K`;
+const $  = id => document.getElementById(id);
+const el = (tag, cls, html, style) => {
   const e = document.createElement(tag);
-  if(cls) e.className=cls;
-  if(html) e.innerHTML=html;
-  if(style) e.style.cssText=style;
+  if (cls)   e.className   = cls;
+  if (html)  e.innerHTML   = html;
+  if (style) e.style.cssText = style;
   return e;
 };
 
-function badgeHTML(b){
-  if(!b) return '';
-  const cls = b==='NEW'?'badge-new':b==='TOP 10'?'badge-top':'badge-award';
+function badgeHTML(b) {
+  if (!b) return '';
+  const cls = b === 'NEW' ? 'badge-new' : b === 'TOP 10' ? 'badge-top' : 'badge-award';
   return `<span class="badge ${cls}">${b}</span>`;
 }
-
-function starRating(r){
-  return `<svg width="12" height="12" style="fill:#f5c518;vertical-align:middle;"><use href="#ic-star"/></svg> <span style="font-size:12.5px;font-weight:600;vertical-align:middle;">${r}</span>`;
+function starRating(r) {
+  return `<svg width="12" height="12" style="fill:#f5c518;vertical-align:middle;"><use href="#ic-star"/></svg>
+          <span style="font-size:12.5px;font-weight:600;vertical-align:middle;">${r}</span>`;
 }
 
-// ─── AUTH ─────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// AUTH — role / mode toggles
+// ═══════════════════════════════════════════════════════════════════════════
 let authRole = 'user', authMode = 'login';
 
-function setRole(r){
+function setRole(r) {
   authRole = r;
-  $('role-user').classList.toggle('active', r==='user');
-  $('role-admin').classList.toggle('active', r==='admin');
-  const ac = r==='admin'?'#7c3aed':'#e50914';
-  $('role-user').style.background = r==='user'?'#e50914':'transparent';
-  $('role-user').style.color = r==='user'?'#fff':'#666';
-  $('role-admin').style.background = r==='admin'?'#7c3aed':'transparent';
-  $('role-admin').style.color = r==='admin'?'#fff':'#666';
+  const ac = r === 'admin' ? '#7c3aed' : '#e50914';
+  $('role-user').style.cssText  = `background:${r==='user'?'#e50914':'transparent'};color:${r==='user'?'#fff':'#666'};`;
+  $('role-admin').style.cssText = `background:${r==='admin'?'#7c3aed':'transparent'};color:${r==='admin'?'#fff':'#666'};`;
   $('auth-logo-icon').style.background = ac;
   $('auth-btn').style.background = ac;
-  $('auth-tagline').textContent = r==='admin'?'Powering the platform behind the scenes.':'Cinema without limits.';
-  // toggle fields
-  if(r==='admin'){
+  $('auth-tagline').textContent = r === 'admin'
+    ? 'Powering the platform behind the scenes.'
+    : 'Cinema without limits.';
+  if (r === 'admin') {
     $('field-name').classList.remove('hidden');
     $('field-email').classList.add('hidden');
-    $('name-label').textContent='ADMIN NAME';
-    $('inp-name').placeholder='';
-    $('inp-pw').placeholder='';
+    $('name-label').textContent  = 'ADMIN NAME';
+    $('inp-name').placeholder    = 'admin';
+    $('inp-pw').placeholder      = 'password';
   } else {
-    $('field-name').classList.toggle('hidden', authMode==='login');
+    $('field-name').classList.toggle('hidden', authMode === 'login');
     $('field-email').classList.remove('hidden');
-    $('inp-pw').placeholder='••••••••';
+    $('inp-pw').placeholder = '••••••••';
   }
-  // update tab underline color
-  document.querySelectorAll('.auth-tab.active').forEach(t=>t.style.borderBottomColor=ac);
-  $('inp-name').value='';$('inp-email').value='';$('inp-pw').value='';
+  document.querySelectorAll('.auth-tab.active').forEach(t => t.style.borderBottomColor = ac);
+  $('inp-name').value = ''; $('inp-email').value = ''; $('inp-pw').value = '';
   $('auth-err').classList.add('hidden');
 }
 
-function setMode(m){
+function setMode(m) {
   authMode = m;
-  $('tab-login').classList.toggle('active',m==='login');
-  $('tab-register').classList.toggle('active',m==='register');
-  const ac = authRole==='admin'?'#7c3aed':'#e50914';
-  document.querySelectorAll('.auth-tab').forEach(t=>t.style.borderBottomColor='transparent');
-  (m==='login'?$('tab-login'):$('tab-register')).style.borderBottomColor=ac;
-  if(authRole!=='admin'){
-    $('field-name').classList.toggle('hidden',m==='login');
+  $('tab-login').classList.toggle('active', m === 'login');
+  $('tab-register').classList.toggle('active', m === 'register');
+  const ac = authRole === 'admin' ? '#7c3aed' : '#e50914';
+  document.querySelectorAll('.auth-tab').forEach(t => t.style.borderBottomColor = 'transparent');
+  (m === 'login' ? $('tab-login') : $('tab-register')).style.borderBottomColor = ac;
+  if (authRole !== 'admin') {
+    $('field-name').classList.toggle('hidden', m === 'login');
   }
-  $('auth-btn').textContent = m==='login'?'Sign In →':'Create Account →';
+  $('auth-btn').textContent = m === 'login' ? 'Sign In →' : 'Create Account →';
   $('auth-err').classList.add('hidden');
 }
 
-function togglePw(){
-  const inp=$('inp-pw'), btn=inp.nextElementSibling;
-  inp.type = inp.type==='password'?'text':'password';
-  btn.textContent = inp.type==='password'?'SHOW':'HIDE';
+function togglePw() {
+  const inp = $('inp-pw'), btn = inp.nextElementSibling;
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? 'SHOW' : 'HIDE';
 }
 
-function handleAuth(){
-  const err=$('auth-err');
-  err.classList.add('hidden');
-  const name=$('inp-name').value.trim();
-  const email=$('inp-email').value.trim();
-  const pw=$('inp-pw').value;
+function showErr(msg) {
+  $('auth-err').textContent = msg;
+  $('auth-err').classList.remove('hidden');
+  $('auth-btn').textContent = authMode === 'login' ? 'Sign In →' : 'Create Account →';
+  $('auth-btn').style.background = authRole === 'admin' ? '#7c3aed' : '#e50914';
+}
 
-  if(authRole==='admin'){
-    if(!name||!pw){showErr('Enter your admin name and password.');return;}
-    if(name.toLowerCase()!==ADMIN_CREDS.name.toLowerCase()){showErr('Admin name not recognised.');return;}
-    if(pw!==ADMIN_CREDS.password){showErr('Incorrect password. Hint: ');return;}
-  } else {
-    if(!email||!pw){showErr('Please fill all fields.');return;}
+// ═══════════════════════════════════════════════════════════════════════════
+// HANDLE AUTH  (login / register / admin)
+// ═══════════════════════════════════════════════════════════════════════════
+function handleAuth() {
+  $('auth-err').classList.add('hidden');
+  const name  = $('inp-name').value.trim();
+  const email = $('inp-email').value.trim();
+  const pw    = $('inp-pw').value;
+
+  // ── ADMIN LOGIN ──────────────────────────────────────────────────────────
+  if (authRole === 'admin') {
+    if (!name || !pw) { showErr('Enter admin name and password.'); return; }
+    if (name.toLowerCase() !== ADMIN_CREDS.name) { showErr('Admin name not recognised.'); return; }
+    if (pw !== ADMIN_CREDS.password) { showErr('Incorrect admin password.'); return; }
+    $('auth-btn').innerHTML = '<div class="spinner"></div>';
+    setTimeout(() => {
+      state.currentUser = { ...ADMIN_CREDS };
+      DB.saveSession(ADMIN_CREDS.id, 'admin');
+      initAdminPanel();
+    }, 700);
+    return;
   }
 
-  // Show spinner
-  $('auth-btn').innerHTML='<div class="spinner"></div>';
-  setTimeout(()=>{
-    if(authRole==='admin'){
-      state.currentUser = {...ADMIN_CREDS};
-      initAdminPanel();
-    } else {
-      const found = USERS_DATA.find(u=>u.email===email);
-      const u = found || {id:99,name:name||email.split('@')[0],email,plan:'Basic',joined:'2025',watchlist:[],watched:[],avatar:email.slice(0,2).toUpperCase(),status:'Active'};
-      state.currentUser = {...u, role:'user'};
-      state.watchlist = [...(u.watchlist||[])];
-      state.watched = [...(u.watched||[])];
+  // ── USER REGISTER ────────────────────────────────────────────────────────
+  if (authMode === 'register') {
+    if (!name)  { showErr('Please enter your name.');    return; }
+    if (!email) { showErr('Please enter your email.');   return; }
+    if (!pw)    { showErr('Please enter a password.');   return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showErr('Enter a valid email address.'); return; }
+    if (pw.length < 6)  { showErr('Password must be at least 6 characters.'); return; }
+    if (DB.findUserByEmail(email)) { showErr('An account with this email already exists. Please sign in.'); return; }
+
+    $('auth-btn').innerHTML = '<div class="spinner"></div>';
+    setTimeout(() => {
+      // ── INSERT INTO sv_users ─────────────────────────────────────────────
+      const newUser = DB.insertUser({ name, email, password: pw, plan: 'Basic' });
+      // Confirm it was saved
+      const saved = DB.findUserByEmail(email);
+      console.log('[Auth] Registered and saved to sv_users:', saved);
+
+      state.currentUser = { ...newUser, role: 'user' };
+      state.watchlist   = [];
+      state.watched     = [];
+      DB.saveSession(newUser.id, 'user');
       initUserPanel();
-    }
-  },1000);
+    }, 800);
+    return;
+  }
+
+  // ── USER LOGIN ───────────────────────────────────────────────────────────
+  if (!email || !pw) { showErr('Please fill all fields.'); return; }
+  const found = DB.findUserByEmail(email);
+  if (!found) { showErr('No account found. Please create an account first.'); return; }
+  if (found.password !== pw) { showErr('Incorrect password.'); return; }
+  if (found.status === 'Suspended') { showErr('Account suspended. Contact support.'); return; }
+
+  $('auth-btn').innerHTML = '<div class="spinner"></div>';
+  setTimeout(() => {
+    state.currentUser = { ...found, role: 'user' };
+    state.watchlist   = [...(found.watchlist || [])];
+    state.watched     = [...(found.watched   || [])];
+    DB.saveSession(found.id, 'user');
+    initUserPanel();
+  }, 700);
 }
 
-function showErr(msg){
-  $('auth-err').textContent=msg;
-  $('auth-err').classList.remove('hidden');
-  $('auth-btn').textContent=authMode==='login'?'Sign In →':'Create Account →';
-  $('auth-btn').style.background=authRole==='admin'?'#7c3aed':'#e50914';
+// ── LOGOUT ────────────────────────────────────────────────────────────────
+function logout() {
+  // Save watchlist/watched back to DB before leaving
+  if (state.currentUser && state.currentUser.role === 'user') {
+    DB.updateUser(state.currentUser.id, {
+      watchlist: state.watchlist,
+      watched:   state.watched,
+    });
+  }
+  DB.clearSession();
+  state.currentUser = null;
+  ['user-panel','admin-panel'].forEach(id => {
+    $(id).classList.remove('active');
+    $(id).style.display = 'none';
+  });
+  $('auth-screen').style.display = 'flex';
+  $('auth-btn').textContent = 'Sign In →';
+  $('auth-btn').style.background = '#e50914';
+  $('inp-name').value = ''; $('inp-email').value = ''; $('inp-pw').value = '';
 }
 
-function logout(){
-  state.currentUser=null;
-  $('user-panel').classList.remove('active');
-  $('admin-panel').classList.remove('active');
-  $('user-panel').style.display='none';
-  $('admin-panel').style.display='none';
-  $('auth-screen').style.display='flex';
-  $('auth-btn').textContent='Sign In →';
-  $('inp-name').value='';$('inp-email').value='';$('inp-pw').value='';
-}
-
-// ─── INIT USER PANEL ─────────────────────────────────────────────────────────
-function initUserPanel(){
-  $('auth-screen').style.display='none';
-  const up=$('user-panel');
-  up.style.display='block';
-
-  const u=state.currentUser;
-  $('user-avatar').textContent=u.avatar;
-  $('profile-avatar').textContent=u.avatar;
-  $('profile-name').textContent=u.name;
-  $('profile-email').textContent=u.email;
-  $('profile-plan').textContent=u.plan;
-  $('profile-joined').textContent='Since '+(u.joined||'2024');
-  $('stat-plan').textContent=u.plan;
-
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT USER PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+function initUserPanel() {
+  $('auth-screen').style.display = 'none';
+  const up = $('user-panel');
+  up.style.display = 'block';
+  const u = state.currentUser;
+  $('user-avatar').textContent    = u.avatar;
+  $('profile-avatar').textContent = u.avatar;
+  $('profile-name').textContent   = u.name;
+  $('profile-email').textContent  = u.email;
+  $('profile-plan').textContent   = u.plan;
+  $('profile-joined').textContent = 'Since ' + (u.joined || new Date().getFullYear());
+  $('stat-plan').textContent      = u.plan;
+  syncState();
   renderHero();
   renderContinueWatching();
   renderHomeRows();
@@ -1013,46 +1363,43 @@ function initUserPanel(){
   showUserPage('home');
 }
 
-function renderHero(){
-  const m=state.movies[2]; // The Glass Cathedral
-  $('hero-bg').style.background=m.bg;
-  $('hero-badge').innerHTML=badgeHTML(m.badge);
-  $('hero-title').textContent=m.title;
-  $('hero-meta').innerHTML=`
+function renderHero() {
+  const m = state.movies[2] || state.movies[0];
+  $('hero-bg').style.background = m.bg;
+  $('hero-badge').innerHTML  = badgeHTML(m.badge);
+  $('hero-title').textContent = m.title;
+  $('hero-meta').innerHTML = `
     <span>${starRating(m.rating)}</span>
     <span style="color:#444">·</span>
     <span style="color:#999;font-size:13px">${m.genre}</span>
     <span style="color:#444">·</span>
     <span style="color:#999;font-size:13px">${m.duration}</span>`;
-  $('hero-desc').textContent=`"${m.description}"`;
-  $('hero-info').onclick=()=>openMovieModal(m.id);
+  $('hero-desc').textContent = `"${m.description}"`;
+  $('hero-info').onclick = () => openMovieModal(m.id);
 }
 
-function renderContinueWatching(){
-  const row=$('continue-row');
-  row.innerHTML='';
-  state.movies.filter(m=>state.watched.includes(m.id)).slice(0,5).forEach(m=>{
-    const prog=Math.floor(Math.random()*55+15);
-    const card=el('div','cw-card');
-    card.innerHTML=`
-      <div class="cw-inner">
-        <div class="cw-bg" style="background:${m.bg}"></div>
-        <div class="cw-grad"></div>
-        <div class="cw-info">
-          <div class="cw-title">${m.title}</div>
-          <div class="pb" style="margin-top:5px;"><div class="pb-fill" style="width:${prog}%;background:#e50914;"></div></div>
-        </div>
-      </div>`;
-    card.onclick=()=>openMovieModal(m.id);
+function renderContinueWatching() {
+  const row = $('continue-row'); row.innerHTML = '';
+  state.movies.filter(m => state.watched.includes(m.id)).slice(0,5).forEach(m => {
+    const prog = Math.floor(Math.random()*55+15);
+    const card = el('div','cw-card');
+    card.innerHTML = `<div class="cw-inner">
+      <div class="cw-bg" style="background:${m.bg}"></div>
+      <div class="cw-grad"></div>
+      <div class="cw-info">
+        <div class="cw-title">${m.title}</div>
+        <div class="pb" style="margin-top:5px;"><div class="pb-fill" style="width:${prog}%;background:#e50914;"></div></div>
+      </div></div>`;
+    card.onclick = () => openMovieModal(m.id);
     row.appendChild(card);
   });
 }
 
-function movieCardHTML(m, small=false){
-  const inWL=state.watchlist.includes(m.id);
-  const card=el('div','movie-card');
-  if(small) card.style.cssText='flex:0 0 clamp(130px,33vw,170px)';
-  card.innerHTML=`
+function movieCardHTML(m, small=false) {
+  const inWL = state.watchlist.includes(m.id);
+  const card = el('div','movie-card');
+  if (small) card.style.cssText = 'flex:0 0 clamp(130px,33vw,170px)';
+  card.innerHTML = `
     <div class="movie-poster">
       <div class="movie-poster-bg" style="background:${m.bg}"></div>
       <div class="movie-poster-grad"></div>
@@ -1078,196 +1425,200 @@ function movieCardHTML(m, small=false){
       <span style="font-size:12px;font-weight:600;">${m.rating}</span>
       <span style="font-size:11.5px;color:#555;margin-left:3px;">${m.duration}</span>
     </div>`;
-  card.querySelector('.movie-poster').onclick=()=>openMovieModal(m.id);
+  card.querySelector('.movie-poster').onclick = () => openMovieModal(m.id);
   return card;
 }
 
-function renderRow(rowId, movies){
-  const row=$(rowId); row.innerHTML='';
-  movies.forEach(m=>row.appendChild(movieCardHTML(m)));
+function renderRow(rowId, movies) {
+  const row = $(rowId); row.innerHTML = '';
+  movies.forEach(m => row.appendChild(movieCardHTML(m)));
 }
 
-function renderHomeRows(){
-  const sorted=[...state.movies].sort((a,b)=>b.views-a.views);
+function renderHomeRows() {
+  const sorted = [...state.movies].sort((a,b) => b.views - a.views);
   renderRow('trending-row', sorted.slice(0,7));
-  renderRow('new-row', state.movies.filter(m=>m.badge==='NEW'));
-  renderRow('awards-row', state.movies.filter(m=>m.badge==='AWARD'||m.rating>=9.0));
+  renderRow('new-row',      state.movies.filter(m => m.badge === 'NEW'));
+  renderRow('awards-row',   state.movies.filter(m => m.badge === 'AWARD' || m.rating >= 9.0));
 }
 
-function renderBrowse(){
-  // Genre chips
-  const chips=$('genre-chips'); chips.innerHTML='';
-  GENRES.forEach(g=>{
-    const btn=el('button',`genre-chip${state.currentGenre===g?' active':''}`,g);
-    btn.onclick=()=>{ state.currentGenre=g; renderBrowse(); };
+function renderBrowse() {
+  const chips = $('genre-chips'); chips.innerHTML = '';
+  GENRES.forEach(g => {
+    const btn = el('button', `genre-chip${state.currentGenre===g?' active':''}`, g);
+    btn.onclick = () => { state.currentGenre = g; renderBrowse(); };
     chips.appendChild(btn);
   });
-
-  const filtered=state.movies.filter(m=>{
-    const gOk=state.currentGenre==='All'||m.genre===state.currentGenre;
-    const sOk=!state.currentSearch||m.title.toLowerCase().includes(state.currentSearch.toLowerCase())||m.genre.toLowerCase().includes(state.currentSearch.toLowerCase());
-    return gOk&&sOk;
+  const filtered = state.movies.filter(m => {
+    const gOk = state.currentGenre === 'All' || m.genre === state.currentGenre;
+    const sOk = !state.currentSearch || m.title.toLowerCase().includes(state.currentSearch.toLowerCase()) || m.genre.toLowerCase().includes(state.currentSearch.toLowerCase());
+    return gOk && sOk;
   });
-
-  $('browse-count').textContent=`${filtered.length} title${filtered.length!==1?'s':''} available`;
-  const grid=$('browse-grid'); grid.innerHTML='';
-  $('no-results').classList.toggle('hidden',filtered.length>0);
-  filtered.forEach((m,i)=>{
-    const card=movieCardHTML(m);
-    card.style.animation=`fadeUp .35s ${i*.04}s ease both`;
+  $('browse-count').textContent = `${filtered.length} title${filtered.length!==1?'s':''} available`;
+  const grid = $('browse-grid'); grid.innerHTML = '';
+  $('no-results').classList.toggle('hidden', filtered.length > 0);
+  filtered.forEach((m,i) => {
+    const card = movieCardHTML(m);
+    card.style.animation = `fadeUp .35s ${i*.04}s ease both`;
     grid.appendChild(card);
   });
 }
 
-function renderWatchlist(){
-  const wlMovies=state.movies.filter(m=>state.watchlist.includes(m.id));
-  $('wl-count').textContent=`${wlMovies.length} saved title${wlMovies.length!==1?'s':''}`;
-  const grid=$('wl-grid'); grid.innerHTML='';
-  $('wl-empty').classList.toggle('hidden',wlMovies.length>0);
-  wlMovies.forEach((m,i)=>{
-    const card=movieCardHTML(m);
-    card.style.animation=`fadeUp .35s ${i*.04}s ease both`;
+function renderWatchlist() {
+  const wlMovies = state.movies.filter(m => state.watchlist.includes(m.id));
+  $('wl-count').textContent = `${wlMovies.length} saved title${wlMovies.length!==1?'s':''}`;
+  const grid = $('wl-grid'); grid.innerHTML = '';
+  $('wl-empty').classList.toggle('hidden', wlMovies.length > 0);
+  wlMovies.forEach((m,i) => {
+    const card = movieCardHTML(m);
+    card.style.animation = `fadeUp .35s ${i*.04}s ease both`;
     grid.appendChild(card);
   });
 }
 
-function updateProfileStats(){
-  $('stat-wl').textContent=state.watchlist.length;
-  $('stat-watched').textContent=state.watched.length;
+function updateProfileStats() {
+  $('stat-wl').textContent      = state.watchlist.length;
+  $('stat-watched').textContent = state.watched.length;
 }
 
-function toggleWL(id){
-  if(state.watchlist.includes(id)){
-    state.watchlist=state.watchlist.filter(x=>x!==id);
+function toggleWL(id) {
+  if (state.watchlist.includes(id)) {
+    state.watchlist = state.watchlist.filter(x => x !== id);
   } else {
     state.watchlist.push(id);
   }
+  // ── UPDATE sv_users watchlist ────────────────────────────────────────────
+  if (state.currentUser && state.currentUser.id) {
+    DB.updateUser(state.currentUser.id, { watchlist: state.watchlist });
+  }
   renderWatchlist();
   updateProfileStats();
-  // update hover buttons
-  document.querySelectorAll(`.wl-btn-${id}`).forEach(btn=>{
-    const inWL=state.watchlist.includes(id);
-    btn.style.border=`1px solid ${inWL?'#e50914':'rgba(255,255,255,.28)'}`;
-    btn.innerHTML=`<svg width="15" height="15" style="fill:${inWL?'#e50914':'none'};stroke:${inWL?'#e50914':'#fff'};stroke-width:2"><use href="#ic-${inWL?'bookmark-fill':'bookmark'}"/></svg>`;
+  document.querySelectorAll(`.wl-btn-${id}`).forEach(btn => {
+    const inWL = state.watchlist.includes(id);
+    btn.style.border = `1px solid ${inWL?'#e50914':'rgba(255,255,255,.28)'}`;
+    btn.innerHTML = `<svg width="15" height="15" style="fill:${inWL?'#e50914':'none'};stroke:${inWL?'#e50914':'#fff'};stroke-width:2"><use href="#ic-${inWL?'bookmark-fill':'bookmark'}"/></svg>`;
   });
-  // update modal if open
-  if(state.currentMovieModal===id) updateModalWLButton(id);
+  if (state.currentMovieModal === id) updateModalWLButton(id);
 }
 
-function handleSearch(v){
-  state.currentSearch=v;
+function handleSearch(v) {
+  state.currentSearch = v;
   renderBrowse();
 }
 
-function showUserPage(page){
-  document.querySelectorAll('#user-panel .page').forEach(p=>p.classList.remove('active'));
+function showUserPage(page) {
+  document.querySelectorAll('#user-panel .page').forEach(p => p.classList.remove('active'));
   $(`u-${page}`).classList.add('active');
-  document.querySelectorAll('.nav-link').forEach(l=>l.classList.remove('active'));
-  const navMap={home:0,browse:1,watchlist:2};
-  const links=document.querySelectorAll('#nav-links .nav-link');
-  if(navMap[page]!==undefined) links[navMap[page]].classList.add('active');
+  document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+  const navMap = { home:0, browse:1, watchlist:2 };
+  const links  = document.querySelectorAll('#nav-links .nav-link');
+  if (navMap[page] !== undefined) links[navMap[page]].classList.add('active');
   window.scrollTo(0,0);
 }
 
-function toggleMobileNav(){
-  $('mobile-nav').classList.toggle('open');
-}
-function closeMobileNav(){
-  $('mobile-nav').classList.remove('open');
-}
+function toggleMobileNav()  { $('mobile-nav').classList.toggle('open'); }
+function closeMobileNav()   { $('mobile-nav').classList.remove('open'); }
 
-// ─── MOVIE MODAL ─────────────────────────────────────────────────────────────
-function openMovieModal(id){
-  const m=state.movies.find(m=>m.id===id);
-  if(!m) return;
-  state.currentMovieModal=id;
-  $('mm-hero').style.background=m.bg;
-  $('mm-badge').innerHTML=badgeHTML(m.badge);
-  $('mm-title').textContent=m.title;
-  $('mm-desc').textContent=`"${m.description}"`;
-  $('mm-director').textContent=m.director;
-  $('mm-tags').innerHTML=[m.genre,m.year,m.duration].map(v=>`<span class="tag">${v}</span>`).join('')+
-    `<span class="tag">${starRating(m.rating)}</span>`+
+// ── MOVIE MODAL ──────────────────────────────────────────────────────────
+function openMovieModal(id) {
+  const m = state.movies.find(m => m.id === id);
+  if (!m) return;
+  state.currentMovieModal = id;
+  $('mm-hero').style.background = m.bg;
+  $('mm-badge').innerHTML   = badgeHTML(m.badge);
+  $('mm-title').textContent = m.title;
+  $('mm-desc').textContent  = `"${m.description}"`;
+  $('mm-director').textContent = m.director;
+  $('mm-tags').innerHTML = [m.genre, m.year, m.duration].map(v => `<span class="tag">${v}</span>`).join('') +
+    `<span class="tag">${starRating(m.rating)}</span>` +
     `<span class="tag"><svg width="11" height="11" style="fill:none;stroke:#777;stroke-width:2"><use href="#ic-eye"/></svg> ${fV(m.views)}</span>`;
-  $('mm-cast').innerHTML=m.cast.map(c=>`<span class="cast-chip">${c}</span>`).join('');
+  $('mm-cast').innerHTML = (m.cast||[]).map(c => `<span class="cast-chip">${c}</span>`).join('');
   updateModalWLButton(id);
   $('movie-modal').classList.remove('hidden');
-  document.body.style.overflow='hidden';
+  document.body.style.overflow = 'hidden';
 }
 
-function updateModalWLButton(id){
-  const inWL=state.watchlist.includes(id);
-  $('mm-wl-icon').innerHTML=`<use href="#ic-${inWL?'check':'plus'}"/>`;
-  $('mm-wl-icon').style.fill=inWL?'none':'none';
-  $('mm-wl-icon').style.stroke=inWL?'#e50914':'#fff';
-  $('mm-wl-text').textContent=inWL?'In My List':'Add to List';
-  $('mm-wl-btn').style.borderColor=inWL?'#e50914':'';
-  $('mm-wl-btn').style.color=inWL?'#e50914':'';
+function updateModalWLButton(id) {
+  const inWL = state.watchlist.includes(id);
+  $('mm-wl-icon').innerHTML    = `<use href="#ic-${inWL?'check':'plus'}"/>`;
+  $('mm-wl-icon').style.stroke = inWL ? '#e50914' : '#fff';
+  $('mm-wl-text').textContent  = inWL ? 'In My List' : 'Add to List';
+  $('mm-wl-btn').style.borderColor = inWL ? '#e50914' : '';
+  $('mm-wl-btn').style.color       = inWL ? '#e50914' : '';
 }
 
-function toggleWLFromModal(){
-  if(state.currentMovieModal) toggleWL(state.currentMovieModal);
+function toggleWLFromModal() {
+  if (state.currentMovieModal) toggleWL(state.currentMovieModal);
 }
 
-function closeMovieModal(e){
-  if(e.target===$('movie-modal')) closeModal('movie-modal');
+function closeMovieModal(e) {
+  if (e.target === $('movie-modal')) closeModal('movie-modal');
 }
 
-function closeModal(id){
+function closeModal(id) {
   $(id).classList.add('hidden');
-  document.body.style.overflow='';
+  document.body.style.overflow = '';
 }
 
-// ─── INIT ADMIN PANEL ────────────────────────────────────────────────────────
-function initAdminPanel(){
-  $('auth-screen').style.display='none';
-  const ap=$('admin-panel');
-  ap.style.display='flex';
-  $('admin-name-sb').textContent=ADMIN_CREDS.name;
-  $('admin-avatar-sb').textContent=ADMIN_CREDS.avatar;
-  $('dash-welcome').textContent=`Welcome back, ${ADMIN_CREDS.name}. Here's your platform at a glance.`;
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT ADMIN PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+function initAdminPanel() {
+  $('auth-screen').style.display = 'none';
+  $('admin-panel').style.display = 'flex';
+  $('admin-name-sb').textContent = ADMIN_CREDS.name;
+  $('admin-avatar-sb').textContent = ADMIN_CREDS.avatar;
+  $('dash-welcome').textContent = `Welcome back, ${ADMIN_CREDS.name}. Here's your platform at a glance.`;
+  // Always reload fresh from localStorage before rendering
+  syncState();
   renderDashboard();
   renderMoviesTable();
-  renderUsersTable();
+  renderUsersTable();   // ← this reads live sv_users including new registrations
   renderAnalytics();
   showAdminPage('dashboard');
 }
 
-function showAdminPage(page){
-  document.querySelectorAll('#admin-panel .page').forEach(p=>p.classList.remove('active'));
+function showAdminPage(page) {
+  document.querySelectorAll('#admin-panel .page').forEach(p => p.classList.remove('active'));
   $(`a-${page}`).classList.add('active');
-  document.querySelectorAll('.sidebar-item').forEach((item,i)=>{
-    const pages=['dashboard','movies','users','analytics','settings'];
-    item.classList.toggle('active',pages[i]===page);
+  document.querySelectorAll('.sidebar-item').forEach((item,i) => {
+    const pages = ['dashboard','movies','users','analytics','settings'];
+    item.classList.toggle('active', pages[i] === page);
   });
+  // Refresh DB view when settings opened
+  if (page === 'settings') setTimeout(refreshDBView, 50);
+  // Refresh users table every time Users page opens
+  if (page === 'users') { syncState(); renderUsersTable(); }
   closeSidebar();
   window.scrollTo(0,0);
 }
 
-function toggleSidebar(){
+function toggleSidebar() {
   $('admin-sidebar').classList.toggle('open');
   $('sidebar-overlay').classList.toggle('open');
 }
-function closeSidebar(){
+function closeSidebar() {
   $('admin-sidebar').classList.remove('open');
   $('sidebar-overlay').classList.remove('open');
 }
 
-// ─── DASHBOARD ───────────────────────────────────────────────────────────────
-function renderDashboard(){
-  const totalV=state.movies.reduce((s,m)=>s+m.views,0);
-  const avgR=(state.movies.reduce((s,m)=>s+m.rating,0)/state.movies.length).toFixed(1);
-  const kpis=[
-    {l:"Total Movies",v:state.movies.length,sub:"+3 this month",ic:"film",c:"#e50914",rgb:"229,9,20"},
-    {l:"Active Users",v:state.users.filter(u=>u.status==='Active').length,sub:"+12 this week",ic:"users",c:"#7c3aed",rgb:"124,58,237"},
-    {l:"Total Views",v:fV(totalV),sub:"+8.2% this month",ic:"eye",c:"#3b82f6",rgb:"59,130,246"},
-    {l:"Avg Rating",v:avgR,sub:"★ Top Platform",ic:"star",c:"#f5c518",rgb:"245,197,24"},
+// ═══════════════════════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════════════════════
+function renderDashboard() {
+  syncState();
+  const totalV = state.movies.reduce((s,m) => s+m.views, 0);
+  const avgR   = (state.movies.reduce((s,m) => s+m.rating, 0) / state.movies.length).toFixed(1);
+  const kpis = [
+    {l:"Total Movies",  v:state.movies.length,                              sub:"+3 this month",   ic:"film",  c:"#e50914", rgb:"229,9,20"},
+    {l:"Total Users",   v:state.users.length,                               sub:`${state.users.filter(u=>u.status==='Active').length} active`, ic:"users", c:"#7c3aed", rgb:"124,58,237"},
+    {l:"Total Views",   v:fV(totalV),                                        sub:"+8.2% this month", ic:"eye",   c:"#3b82f6", rgb:"59,130,246"},
+    {l:"Avg Rating",    v:avgR,                                              sub:"★ Top Platform",  ic:"star",  c:"#f5c518", rgb:"245,197,24"},
   ];
-  const grid=$('kpi-grid'); grid.innerHTML='';
-  kpis.forEach((k,i)=>{
-    const c=el('div','kpi-card');
-    c.style.animation=`fadeUp .5s ${i*.08}s ease both`;
-    c.innerHTML=`<div class="kpi-inner">
+  const grid = $('kpi-grid'); grid.innerHTML = '';
+  kpis.forEach((k,i) => {
+    const c = el('div','kpi-card');
+    c.style.animation = `fadeUp .5s ${i*.08}s ease both`;
+    c.innerHTML = `<div class="kpi-inner">
       <div>
         <div class="kpi-label">${k.l.toUpperCase()}</div>
         <div class="kpi-val">${k.v}</div>
@@ -1280,20 +1631,19 @@ function renderDashboard(){
     grid.appendChild(c);
   });
 
-  // Dashboard table
-  const sorted=[...state.movies].sort((a,b)=>b.views-a.views).slice(0,6);
-  const tbl=$('dash-table');
-  tbl.innerHTML=`<thead><tr>
+  const sorted = [...state.movies].sort((a,b) => b.views-a.views).slice(0,6);
+  const tbl = $('dash-table');
+  tbl.innerHTML = `<thead><tr>
     <th style="text-align:left;padding:12px 16px;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Movie</th>
     <th style="text-align:left;padding:12px 16px;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Genre</th>
     <th style="text-align:left;padding:12px 16px;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Rating</th>
     <th style="text-align:left;padding:12px 16px;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Views</th>
     <th style="text-align:left;padding:12px 16px;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Badge</th>
   </tr></thead><tbody>`;
-  sorted.forEach((m,i)=>{
-    const tr=document.createElement('tr');
-    tr.style.animation=`fadeUp .3s ${i*.04}s ease both`;
-    tr.innerHTML=`
+  sorted.forEach((m,i) => {
+    const tr = document.createElement('tr');
+    tr.style.animation = `fadeUp .3s ${i*.04}s ease both`;
+    tr.innerHTML = `
       <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;">
         <div class="movie-thumb-name">
           <div class="movie-thumb" style="background:${m.bg}"></div>
@@ -1303,18 +1653,21 @@ function renderDashboard(){
       <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;"><span class="tag" style="font-size:10.5px">${m.genre}</span></td>
       <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;">${starRating(m.rating)}</td>
       <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;color:#777;font-size:13px">${fV(m.views)}</td>
-      <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;">${badgeHTML(m.badge)||'<span style="color:#2a2a2a">—</span>'}</td>`;
-    tbl.querySelector('tbody')?tbl.querySelector('tbody').appendChild(tr):tbl.appendChild(tr);
+      <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;">${badgeHTML(m.badge)||'<span style="color:#2a2a2a">—</span>'}`;
+    tbl.querySelector('tbody') ? tbl.querySelector('tbody').appendChild(tr) : tbl.appendChild(tr);
   });
-  $('movies-count-badge').textContent=state.movies.length;
+  $('movies-count-badge').textContent = state.movies.length;
 }
 
-// ─── MOVIES TABLE ────────────────────────────────────────────────────────────
-function renderMoviesTable(){
-  $('movies-sub').textContent=`${state.movies.length} titles in database`;
-  $('movies-count-badge').textContent=state.movies.length;
-  const tbl=$('movies-table');
-  tbl.innerHTML=`<thead><tr>
+// ═══════════════════════════════════════════════════════════════════════════
+// MOVIES TABLE (admin)
+// ═══════════════════════════════════════════════════════════════════════════
+function renderMoviesTable() {
+  syncState();
+  $('movies-sub').textContent = `${state.movies.length} titles in database`;
+  $('movies-count-badge').textContent = state.movies.length;
+  const tbl = $('movies-table');
+  tbl.innerHTML = `<thead><tr>
     <th style="padding:13px 16px;text-align:left;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Movie</th>
     <th style="padding:13px 16px;text-align:left;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Genre</th>
     <th style="padding:13px 16px;text-align:left;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Year</th>
@@ -1323,12 +1676,11 @@ function renderMoviesTable(){
     <th style="padding:13px 16px;text-align:left;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Badge</th>
     <th style="padding:13px 16px;text-align:left;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Actions</th>
   </tr></thead><tbody id="movies-tbody"></tbody>`;
-  const tbody=$('movies-tbody');
-  state.movies.forEach((m,i)=>{
-    const tr=document.createElement('tr');
-    tr.style.animation=`fadeUp .3s ${i*.022}s ease both`;
-    tr.className='';
-    tr.innerHTML=`
+  const tbody = $('movies-tbody');
+  state.movies.forEach((m,i) => {
+    const tr = document.createElement('tr');
+    tr.style.animation = `fadeUp .3s ${i*.022}s ease both`;
+    tr.innerHTML = `
       <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;">
         <div class="movie-thumb-name">
           <div class="movie-thumb" style="background:${m.bg}"></div>
@@ -1354,168 +1706,328 @@ function renderMoviesTable(){
   });
 }
 
-// ─── ADD / EDIT MOVIE ────────────────────────────────────────────────────────
-function openAddModal(){
-  state.editingMovieId=null;
-  $('mf-title').textContent='Add New Movie';
-  $('mf-submit-btn').textContent='Add to Library';
-  ['title','director','duration','year','rating','desc'].forEach(f=>$(`mf-inp-${f}`).value='');
-  $('mf-inp-genre').value='Sci-Fi';
-  $('mf-inp-badge').value='';
-  $('mf-inp-year').value='2024';
-  $('mf-inp-rating').value='8.5';
+// ── ADD / EDIT MOVIE ──────────────────────────────────────────────────────
+function openAddModal() {
+  state.editingMovieId = null;
+  $('mf-title').textContent = 'Add New Movie';
+  $('mf-submit-btn').textContent = 'Add to Library';
+  ['title','director','duration','year','rating','desc'].forEach(f => $(`mf-inp-${f}`).value = '');
+  $('mf-inp-genre').value  = 'Sci-Fi';
+  $('mf-inp-badge').value  = '';
+  $('mf-inp-year').value   = '2024';
+  $('mf-inp-rating').value = '8.5';
   $('movie-form-modal').classList.remove('hidden');
-  document.body.style.overflow='hidden';
+  document.body.style.overflow = 'hidden';
 }
 
-function openEditModal(id){
-  const m=state.movies.find(m=>m.id===id);
-  if(!m) return;
-  state.editingMovieId=id;
-  $('mf-title').textContent='Edit Movie';
-  $('mf-submit-btn').textContent='Save Changes';
-  $('mf-inp-title').value=m.title;
-  $('mf-inp-director').value=m.director||'';
-  $('mf-inp-duration').value=m.duration||'';
-  $('mf-inp-genre').value=m.genre;
-  $('mf-inp-year').value=m.year;
-  $('mf-inp-rating').value=m.rating;
-  $('mf-inp-badge').value=m.badge||'';
-  $('mf-inp-desc').value=m.description||'';
+function openEditModal(id) {
+  const m = DB.findMovieById(id);
+  if (!m) return;
+  state.editingMovieId = id;
+  $('mf-title').textContent     = 'Edit Movie';
+  $('mf-submit-btn').textContent = 'Save Changes';
+  $('mf-inp-title').value    = m.title;
+  $('mf-inp-director').value = m.director || '';
+  $('mf-inp-duration').value = m.duration || '';
+  $('mf-inp-genre').value    = m.genre;
+  $('mf-inp-year').value     = m.year;
+  $('mf-inp-rating').value   = m.rating;
+  $('mf-inp-badge').value    = m.badge || '';
+  $('mf-inp-desc').value     = m.description || '';
   $('movie-form-modal').classList.remove('hidden');
-  document.body.style.overflow='hidden';
+  document.body.style.overflow = 'hidden';
 }
 
-function submitMovieForm(){
-  const title=$('mf-inp-title').value.trim();
-  if(!title){$('mf-inp-title').style.borderColor='#f87171';return;}
-  $('mf-inp-title').style.borderColor='';
-  const bgs=["linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)","linear-gradient(135deg,#0f0c29,#302b63,#24243e)","linear-gradient(135deg,#064e3b,#065f46,#134e4a)"];
-  const acs=["#60a5fa","#a78bfa","#34d399"];
-  if(state.editingMovieId){
-    state.movies=state.movies.map(m=>m.id===state.editingMovieId?{
-      ...m,
+function submitMovieForm() {
+  const title = $('mf-inp-title').value.trim();
+  if (!title) { $('mf-inp-title').style.borderColor = '#f87171'; return; }
+  $('mf-inp-title').style.borderColor = '';
+  const bgs = ["linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",
+               "linear-gradient(135deg,#0f0c29,#302b63,#24243e)",
+               "linear-gradient(135deg,#064e3b,#065f46,#134e4a)"];
+  const acs = ["#60a5fa","#a78bfa","#34d399"];
+
+  if (state.editingMovieId) {
+    // ── UPDATE sv_movies ────────────────────────────────────────────────────
+    const m = DB.findMovieById(state.editingMovieId);
+    DB.updateMovie(state.editingMovieId, {
       title,
-      director:$('mf-inp-director').value||m.director,
-      duration:$('mf-inp-duration').value||m.duration,
-      genre:$('mf-inp-genre').value,
-      year:parseInt($('mf-inp-year').value)||m.year,
-      rating:parseFloat($('mf-inp-rating').value)||m.rating,
-      badge:$('mf-inp-badge').value||null,
-      description:$('mf-inp-desc').value||m.description,
-    }:m);
+      director:    $('mf-inp-director').value || m.director,
+      duration:    $('mf-inp-duration').value || m.duration,
+      genre:       $('mf-inp-genre').value,
+      year:        parseInt($('mf-inp-year').value)   || m.year,
+      rating:      parseFloat($('mf-inp-rating').value) || m.rating,
+      badge:       $('mf-inp-badge').value || null,
+      description: $('mf-inp-desc').value  || m.description,
+    });
   } else {
-    const i=Math.floor(Math.random()*3);
-    state.movies.unshift({
-      id:Date.now(),title,
-      director:$('mf-inp-director').value||'TBA',
-      duration:$('mf-inp-duration').value||'2h 00m',
-      genre:$('mf-inp-genre').value,
-      year:parseInt($('mf-inp-year').value)||2024,
-      rating:parseFloat($('mf-inp-rating').value)||8.0,
-      badge:$('mf-inp-badge').value||null,
-      description:$('mf-inp-desc').value||'A compelling new addition to the platform.',
-      bg:bgs[i],accent:acs[i],views:Math.floor(Math.random()*1e6+3e5),
-      cast:['TBA'],
+    // ── INSERT INTO sv_movies ───────────────────────────────────────────────
+    const i = Math.floor(Math.random()*3);
+    DB.insertMovie({
+      title,
+      director:    $('mf-inp-director').value || 'TBA',
+      duration:    $('mf-inp-duration').value || '2h 00m',
+      genre:       $('mf-inp-genre').value,
+      year:        parseInt($('mf-inp-year').value)   || 2024,
+      rating:      parseFloat($('mf-inp-rating').value) || 8.0,
+      badge:       $('mf-inp-badge').value || null,
+      description: $('mf-inp-desc').value  || 'A compelling new addition to the platform.',
+      bg: bgs[i], accent: acs[i],
+      views: Math.floor(Math.random()*1e6+3e5),
+      cast: ['TBA'],
     });
   }
+  syncState();
   closeModal('movie-form-modal');
   renderMoviesTable();
   renderDashboard();
   renderAnalytics();
 }
 
-// ─── DELETE MOVIE ────────────────────────────────────────────────────────────
-function openDeleteModal(id){
-  state.deleteMovieId=id;
-  $('del-confirm-btn').onclick=()=>confirmDelete();
+// ── DELETE MOVIE ──────────────────────────────────────────────────────────
+function openDeleteModal(id) {
+  state.deleteMovieId = id;
+  $('del-confirm-btn').onclick = () => confirmDelete();
   $('del-modal').classList.remove('hidden');
-  document.body.style.overflow='hidden';
+  document.body.style.overflow = 'hidden';
 }
-function confirmDelete(){
-  state.movies=state.movies.filter(m=>m.id!==state.deleteMovieId);
+
+function confirmDelete() {
+  // ── DELETE FROM sv_movies ────────────────────────────────────────────────
+  DB.deleteMovie(state.deleteMovieId);
+  syncState();
   closeModal('del-modal');
   renderMoviesTable();
   renderDashboard();
   renderAnalytics();
 }
 
-// ─── USERS TABLE ─────────────────────────────────────────────────────────────
-function renderUsersTable(){
-  const active=state.users.filter(u=>u.status==='Active').length;
-  const suspended=state.users.filter(u=>u.status==='Suspended').length;
-  const premium=state.users.filter(u=>u.plan==='Premium').length;
-  const sg=$('user-stats-grid');
-  sg.innerHTML=[
-    {l:'Active Users',v:active,c:'#22c55e'},
-    {l:'Suspended',v:suspended,c:'#f87171'},
-    {l:'Premium',v:premium,c:'#f5c518'},
-  ].map(s=>`<div class="card" style="display:flex;align-items:center;gap:14px;padding:16px;">
+// ═══════════════════════════════════════════════════════════════════════════
+// USERS TABLE (admin)  ← reads live from sv_users every time
+// ═══════════════════════════════════════════════════════════════════════════
+function renderUsersTable() {
+  // ── SELECT * FROM sv_users ─────────────────────────────────────────────
+  const users = DB.getAllUsers();
+  state.users = users;   // keep state in sync
+
+  const total     = users.length;
+  const active    = users.filter(u => u.status === 'Active').length;
+  const suspended = users.filter(u => u.status === 'Suspended').length;
+  const premium   = users.filter(u => u.plan   === 'Premium').length;
+
+  // Update sidebar badge
+  const badge = $('users-count-badge');
+  if (badge) badge.textContent = total;
+
+  // Stats strip
+  $('user-stats-grid').innerHTML = [
+    {l:'Total Users', v:total,     c:'#a78bfa'},
+    {l:'Active',      v:active,    c:'#22c55e'},
+    {l:'Suspended',   v:suspended, c:'#f87171'},
+    {l:'Premium',     v:premium,   c:'#f5c518'},
+  ].map(s => `<div class="card" style="display:flex;align-items:center;gap:14px;padding:16px;">
     <span style="font-size:34px;font-family:'Bebas Neue',sans-serif;color:${s.c};line-height:1;">${s.v}</span>
     <span style="color:#777;font-size:13px;">${s.l}</span>
   </div>`).join('');
 
-  const tbl=$('users-table');
-  tbl.innerHTML=`<thead><tr>
+  // Table
+  $('users-table').innerHTML = `<thead><tr>
+    <th style="padding:13px 16px;text-align:left;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">#</th>
     <th style="padding:13px 16px;text-align:left;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">User</th>
     <th style="padding:13px 16px;text-align:left;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Plan</th>
     <th style="padding:13px 16px;text-align:left;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Joined</th>
     <th style="padding:13px 16px;text-align:left;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">List</th>
     <th style="padding:13px 16px;text-align:left;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Watched</th>
     <th style="padding:13px 16px;text-align:left;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Status</th>
-    <th style="padding:13px 16px;text-align:left;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Action</th>
+    <th style="padding:13px 16px;text-align:left;font-size:10.5px;color:#777;letter-spacing:1.1px;font-weight:700;border-bottom:1px solid #1e1e1e;">Actions</th>
   </tr></thead><tbody id="users-tbody"></tbody>`;
-  const tbody=$('users-tbody');
-  state.users.forEach((u,i)=>{
-    const planCls=u.plan==='Premium'?'plan-premium':u.plan==='Standard'?'plan-standard':'plan-basic';
-    const statusCls=u.status==='Active'?'status-active':'status-suspended';
-    const tr=document.createElement('tr');
-    tr.style.animation=`fadeUp .3s ${i*.07}s ease both`;
-    tr.innerHTML=`
+
+  const tbody = $('users-tbody');
+
+  if (users.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="padding:40px;text-align:center;color:#555;">No users registered yet.</td></tr>`;
+    return;
+  }
+
+  users.forEach((u, i) => {
+    const planCls   = u.plan==='Premium'  ? 'plan-premium'   : u.plan==='Standard' ? 'plan-standard' : 'plan-basic';
+    const statusCls = u.status==='Active' ? 'status-active'  : u.status==='Banned' ? 'status-banned' : 'status-suspended';
+    const tr = document.createElement('tr');
+    tr.style.animation = `fadeUp .3s ${i*.06}s ease both`;
+    tr.innerHTML = `
+      <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;color:#555;font-size:11.5px;">${i+1}</td>
       <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;">
         <div style="display:flex;align-items:center;gap:11px;">
-          <div style="width:34px;height:34px;background:linear-gradient(135deg,#e50914,#7c3aed);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:700;flex-shrink:0;">${u.avatar}</div>
-          <div><div style="font-size:13px;font-weight:600;">${u.name}</div><div style="font-size:11px;color:#777;">${u.email}</div></div>
+          <div style="width:34px;height:34px;background:linear-gradient(135deg,#e50914,#7c3aed);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:700;flex-shrink:0;">${u.avatar||'?'}</div>
+          <div>
+            <div style="font-size:13px;font-weight:600;">${u.name}</div>
+            <div style="font-size:11px;color:#777;">${u.email}</div>
+          </div>
         </div>
       </td>
       <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;"><span class="plan-chip ${planCls}">${u.plan}</span></td>
       <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;color:#777;font-size:12.5px;">${u.joined}</td>
-      <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;font-size:13px;font-weight:600;">${u.watchlist.length}</td>
-      <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;font-size:13px;font-weight:600;">${u.watched.length}</td>
+      <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;font-size:13px;font-weight:600;">${(u.watchlist||[]).length}</td>
+      <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;font-size:13px;font-weight:600;">${(u.watched||[]).length}</td>
       <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;"><span class="status-chip ${statusCls}">${u.status}</span></td>
       <td style="padding:12px 16px;border-bottom:1px solid #1a1a1a;">
-        <button class="btn-ghost" onclick="toggleUserStatus(${u.id})" style="font-size:11.5px;color:${u.status==='Active'?'#f87171':'#22c55e'};border-color:${u.status==='Active'?'rgba(248,113,113,.22)':'rgba(34,197,94,.22)'};">
-          ${u.status==='Active'?'Suspend':'Activate'}
-        </button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          <button class="btn-ghost" onclick="openEditUserModal(${u.id})" style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;">
+            <svg width="11" height="11" style="fill:none;stroke:#777;stroke-width:2"><use href="#ic-edit"/></svg>Edit
+          </button>
+          <button class="btn-ghost" onclick="toggleUserStatus(${u.id})"
+            style="font-size:11.5px;color:${u.status==='Active'?'#f87171':'#22c55e'};
+                   border-color:${u.status==='Active'?'rgba(248,113,113,.22)':'rgba(34,197,94,.22)'};">
+            ${u.status==='Active'?'Suspend':'Activate'}
+          </button>
+          <button class="btn-danger" onclick="openDeleteUserModal(${u.id})" style="font-size:11.5px;">
+            <svg width="11" height="11" style="fill:none;stroke:#f87171;stroke-width:2"><use href="#ic-trash"/></svg>
+          </button>
+        </div>
       </td>`;
     tbody.appendChild(tr);
   });
+
+  refreshDBView();
 }
 
-function toggleUserStatus(id){
-  state.users=state.users.map(u=>u.id===id?{...u,status:u.status==='Active'?'Suspended':'Active'}:u);
+function toggleUserStatus(id) {
+  const user = DB.findUserById(id);
+  if (!user) return;
+  if (user.status === 'Banned') return; // Use Edit modal to change Banned status
+  // ── UPDATE sv_users SET status = ? WHERE id = ? ──────────────────────────
+  DB.updateUser(id, { status: user.status === 'Active' ? 'Suspended' : 'Active' });
+  syncState();
   renderUsersTable();
   renderDashboard();
 }
 
-// ─── ANALYTICS ───────────────────────────────────────────────────────────────
-function renderAnalytics(){
-  const gb=$('genre-bars'); gb.innerHTML='';
-  GENRES.filter(g=>g!=='All').forEach(g=>{
-    const cnt=state.movies.filter(m=>m.genre===g).length;
-    const pct=Math.round((cnt/state.movies.length)*100);
-    if(!cnt) return;
-    const row=el('div','genre-bar-row');
-    row.innerHTML=`<div class="genre-bar-head"><span class="genre-bar-lbl">${g}</span><span class="genre-bar-val">${cnt} · ${pct}%</span></div>
+// ═══════════════════════════════════════════════════════════════════════════
+// USER EDIT / DELETE (admin)
+// ═══════════════════════════════════════════════════════════════════════════
+function openEditUserModal(id) {
+  const u = DB.findUserById(id);
+  if (!u) return;
+  state.editingUserId = id;
+
+  $('uf-user-id-label').textContent = `ID: ${u.id}  ·  Joined: ${u.joined}`;
+  $('uf-inp-name').value   = u.name;
+  $('uf-inp-email').value  = u.email;
+  $('uf-inp-pw').value     = '';
+  $('uf-inp-plan').value   = u.plan   || 'Basic';
+  $('uf-inp-status').value = u.status || 'Active';
+  $('uf-err').classList.add('hidden');
+  updateUFPreview();
+  $('user-form-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function updateUFPreview() {
+  const name   = $('uf-inp-name').value.trim()  || '?';
+  const email  = $('uf-inp-email').value.trim() || '';
+  const status = $('uf-inp-status') ? $('uf-inp-status').value : 'Active';
+  const plan   = $('uf-inp-plan')   ? $('uf-inp-plan').value   : 'Basic';
+
+  const avatar = name.slice(0,2).toUpperCase();
+  $('uf-avatar-preview').textContent = avatar;
+  $('uf-name-preview').textContent   = name;
+  $('uf-email-preview').textContent  = email;
+
+  const planColors = { Premium:'#f5c518', Standard:'#a78bfa', Basic:'#555' };
+  const statusColors = { Active:'#22c55e', Suspended:'#f87171', Banned:'#f43f5e' };
+  $('uf-status-preview').innerHTML =
+    `<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:12px;
+       background:rgba(0,0,0,.3);border:1px solid ${statusColors[status]||'#555'};
+       color:${statusColors[status]||'#555'}">${status}</span>
+     <span style="display:block;text-align:right;font-size:10px;color:${planColors[plan]||'#555'};font-weight:700;margin-top:4px;">${plan}</span>`;
+}
+
+function toggleUFPw() {
+  const inp = $('uf-inp-pw'), btn = inp.nextElementSibling;
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? 'SHOW' : 'HIDE';
+}
+
+function submitUserForm() {
+  const name   = $('uf-inp-name').value.trim();
+  const email  = $('uf-inp-email').value.trim();
+  const pw     = $('uf-inp-pw').value;
+  const plan   = $('uf-inp-plan').value;
+  const status = $('uf-inp-status').value;
+  const errEl  = $('uf-err');
+
+  errEl.classList.add('hidden');
+
+  if (!name)  { errEl.textContent = 'Username cannot be empty.';  errEl.classList.remove('hidden'); return; }
+  if (!email) { errEl.textContent = 'Email cannot be empty.';     errEl.classList.remove('hidden'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = 'Enter a valid email.'; errEl.classList.remove('hidden'); return; }
+  if (pw && pw.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.classList.remove('hidden'); return; }
+
+  // Check email uniqueness (ignore current user)
+  const existing = DB.findUserByEmail(email);
+  if (existing && existing.id !== state.editingUserId) {
+    errEl.textContent = 'That email is already in use by another account.';
+    errEl.classList.remove('hidden'); return;
+  }
+
+  const patch = {
+    name,
+    email: email.toLowerCase(),
+    plan,
+    status,
+    avatar: name.slice(0,2).toUpperCase(),
+  };
+  if (pw) patch.password = pw;
+
+  // ── UPDATE sv_users ──────────────────────────────────────────────────────
+  DB.updateUser(state.editingUserId, patch);
+  syncState();
+  closeModal('user-form-modal');
+  renderUsersTable();
+  renderDashboard();
+  refreshDBView();
+}
+
+function openDeleteUserModal(id) {
+  const u = DB.findUserById(id);
+  if (!u) return;
+  state.deleteUserId = id;
+  $('del-user-name-hint').textContent = `"${u.name}" (${u.email})`;
+  $('del-user-confirm-btn').onclick = () => confirmDeleteUser();
+  closeModal('user-form-modal');
+  $('del-user-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function confirmDeleteUser() {
+  // ── DELETE FROM sv_users ─────────────────────────────────────────────────
+  DB.deleteUser(state.deleteUserId);
+  syncState();
+  closeModal('del-user-modal');
+  renderUsersTable();
+  renderDashboard();
+  refreshDBView();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ANALYTICS
+// ═══════════════════════════════════════════════════════════════════════════
+function renderAnalytics() {
+  const gb = $('genre-bars'); gb.innerHTML = '';
+  GENRES.filter(g => g!=='All').forEach(g => {
+    const cnt = state.movies.filter(m => m.genre === g).length;
+    const pct = state.movies.length ? Math.round((cnt/state.movies.length)*100) : 0;
+    if (!cnt) return;
+    const row = el('div','genre-bar-row');
+    row.innerHTML = `<div class="genre-bar-head"><span class="genre-bar-lbl">${g}</span><span class="genre-bar-val">${cnt} · ${pct}%</span></div>
       <div class="pb" style="height:5px;"><div class="pb-fill" style="width:${pct}%;background:${pct>14?'#e50914':'#7c3aed'};"></div></div>`;
     gb.appendChild(row);
   });
-
-  const vl=$('viewed-list'); vl.innerHTML='';
-  [...state.movies].sort((a,b)=>b.views-a.views).slice(0,7).forEach((m,i)=>{
-    const row=el('div','viewed-row');
-    row.style.animation=`fadeUp .3s ${i*.04}s ease both`;
-    row.innerHTML=`
+  const vl = $('viewed-list'); vl.innerHTML = '';
+  [...state.movies].sort((a,b) => b.views-a.views).slice(0,7).forEach((m,i) => {
+    const row = el('div','viewed-row');
+    row.style.animation = `fadeUp .3s ${i*.04}s ease both`;
+    row.innerHTML = `
       <span class="viewed-rank" style="color:${i<3?'#e50914':'#777'}">#${i+1}</span>
       <div class="viewed-thumb" style="background:${m.bg}"></div>
       <div class="viewed-info">
@@ -1527,23 +2039,102 @@ function renderAnalytics(){
   });
 }
 
-// ─── INIT ────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// DATABASE VIEW — shown in Settings page
+// ═══════════════════════════════════════════════════════════════════════════
+function refreshDBView() {
+  const el = document.getElementById('db-schema-view');
+  if (!el) return;
+  const users   = DB.getAllUsers();
+  const movies  = DB.getAllMovies();
+  const session = DB.getSession();
+  el.innerHTML = `
+<span style="color:#7c3aed;font-weight:700;font-size:13px;">TABLE sv_users</span>
+<span style="color:#22c55e;"> — ${users.length} row${users.length!==1?'s':''}</span>
+<span style="color:#444;font-size:11px;"> (id, name, email, password, plan, status, joined, avatar, watchlist[], watched[], createdAt)</span>
+
+${users.length === 0
+  ? '<span style="color:#555;">  No rows yet. Register an account to add a row.</span>'
+  : users.map((u,i) => `  <span style="color:#888;">[${i+1}]</span> <span style="color:#f5f5f5;">${u.name}</span>  <span style="color:#555;">${u.email}</span>  <span style="color:${u.plan==='Premium'?'#f5c518':u.plan==='Standard'?'#888':'#555'}">${u.plan}</span>  <span style="color:${u.status==='Active'?'#22c55e':'#f87171'}">${u.status}</span>  <span style="color:#444">${u.joined}</span>`).join('\n')}
+
+<span style="color:#7c3aed;font-weight:700;font-size:13px;">TABLE sv_movies</span>
+<span style="color:#22c55e;"> — ${movies.length} row${movies.length!==1?'s':''}</span>
+<span style="color:#444;font-size:11px;"> (id, title, genre, year, rating, duration, views, badge, director, cast[], bg, accent, description, createdAt)</span>
+
+<span style="color:#7c3aed;font-weight:700;font-size:13px;">TABLE sv_sessions</span>
+<span style="color:#22c55e;"> — ${session ? '1 active' : '0 active'}</span>
+<span style="color:#444;font-size:11px;"> (userId, role, ts)</span>
+${session ? `  userId=${session.userId}  role=${session.role}` : ''}
+
+<span style="color:#555;font-size:11px;">Storage: ${DB.storageSize()}</span>`;
+}
+
+function resetDatabase() {
+  if (!confirm('This will delete all registered users and reset movies to seed data. Continue?')) return;
+  DB.resetAll();
+  syncState();
+  renderDashboard();
+  renderMoviesTable();
+  renderUsersTable();
+  renderAnalytics();
+  refreshDBView();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INJECT DATABASE PANEL INTO SETTINGS PAGE
+// ═══════════════════════════════════════════════════════════════════════════
+function injectSettingsDBPanel() {
+  const page = document.getElementById('a-settings');
+  if (!page || document.getElementById('db-panel-injected')) return;
+
+  const wrap = document.createElement('div');
+  wrap.id = 'db-panel-injected';
+  wrap.innerHTML = `
+    <div class="card" style="margin-top:26px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
+        <div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:3px;">
+            <svg width="14" height="14" style="fill:none;stroke:#7c3aed;stroke-width:2;vertical-align:middle;margin-right:5px;"><use href="#ic-shield"/></svg>
+            Database Manager
+          </div>
+          <div style="font-size:12px;color:#555;">localStorage · 3 tables: sv_users · sv_movies · sv_sessions</div>
+        </div>
+        <button class="btn-danger" onclick="resetDatabase()" style="font-size:12px;">
+          <svg width="12" height="12" style="fill:none;stroke:#f87171;stroke-width:2"><use href="#ic-trash"/></svg>
+          Reset DB
+        </button>
+      </div>
+      <pre id="db-schema-view" style="font-size:11.5px;color:#777;line-height:2;font-family:monospace;background:#0a0a0a;border:1px solid #1e1e1e;border-radius:8px;padding:16px;white-space:pre-wrap;word-break:break-all;max-height:340px;overflow-y:auto;"></pre>
+    </div>`;
+  page.appendChild(wrap);
+  refreshDBView();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════
 setRole('user');
 setMode('login');
 
-// Keyboard support
-document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){
-    ['movie-modal','movie-form-modal','del-modal'].forEach(id=>{
-      if(!$(id).classList.contains('hidden')) closeModal(id);
+// Keyboard ESC
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    ['movie-modal','movie-form-modal','del-modal','user-form-modal','del-user-modal'].forEach(id => {
+      if (!$(id).classList.contains('hidden')) closeModal(id);
     });
     closeMobileNav();
   }
 });
 
-// Set initial auth tab color
-$('tab-login').style.borderBottomColor='#e50914';
-$('tab-register').style.borderBottomColor='transparent';
+// Set initial auth tab colour
+$('tab-login').style.borderBottomColor  = '#e50914';
+$('tab-register').style.borderBottomColor = 'transparent';
+
+// Inject DB panel after DOM is ready
+document.addEventListener('DOMContentLoaded', injectSettingsDBPanel);
+// Fallback if DOMContentLoaded already fired
+if (document.readyState !== 'loading') injectSettingsDBPanel();
+
 </script>
 </body>
 </html>
